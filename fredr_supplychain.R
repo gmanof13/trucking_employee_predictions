@@ -16,7 +16,7 @@ library(modeltime.ensemble)
 
 # getting the data ready  
 
-fredr_set_key("3f279f02c757808ef45fa93d58384232")
+fredr_set_key("INSERT_API_KEY_HERE")
 
 popular_funds_series <- 
   fredr_series_search_text(
