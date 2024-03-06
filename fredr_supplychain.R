@@ -13,10 +13,11 @@ library(parsnip)
 library(recipes)
 library(tidymodels)
 library(modeltime.ensemble)
+library(gghighlight)
 
 # getting the data ready  
 
-fredr_set_key("INSERT_API_KEY_HERE")
+fredr_set_key("3f279f02c757808ef45fa93d58384232")
 
 popular_funds_series <- 
   fredr_series_search_text(
@@ -36,7 +37,7 @@ truck_employee_df <-
   truck_employee_fred_id %>% 
   fredr(
     observation_start = as.Date("2010-01-01"),
-    observation_end = as.Date("2024-03-01")
+    observation_end = as.Date("2022-12-31")
   ) %>% 
   select(date,value) %>% 
   mutate(value = value * 1000)
@@ -47,7 +48,7 @@ total_manuf_df <-
   total_manuf_id %>% 
   fredr(
     observation_start = as.Date("2010-01-01"),
-    observation_end = as.Date("2024-03-01")
+    observation_end = as.Date("2022-12-31")
   ) %>% 
   select(date,value)
 
@@ -139,6 +140,14 @@ calibration_tbl %>%
   modeltime_accuracy() 
 
 
+best_model_mae <- 
+model_accuracy %>% 
+  arrange(mae) %>% 
+  select(.model_desc) %>% 
+  head(1) %>% 
+  pull()
+
+
 refit_tbl <- calibration_tbl %>%
   modeltime_refit(data = model_df)
 
@@ -150,7 +159,7 @@ refit_tbl %>%
 # plot forecast 
 
 model_predictions %>% 
-  filter(year(.index) >= 2017) %>% 
+  filter(year(.index) >= 2022) %>% 
   plot_modeltime_forecast(
     .legend_max_width = 25,
     .interactive      = FALSE,
@@ -158,4 +167,37 @@ model_predictions %>%
     .conf_interval_alpha = .05
     
   )
+
+truck_employee_df_new <- 
+  truck_employee_fred_id %>% 
+  fredr(
+    observation_start = as.Date("2023-01-01"),
+    observation_end = as.Date("2023-12-31")
+  ) %>% 
+  select(date,value) %>% 
+  mutate(value = value * 1000) %>% 
+  mutate(.model_desc = "ACTUAL") %>% 
+  rename(.index = date,
+         .value = value)
+
+truck_employee_df_new
+
+
+# comparing model to new data 
+
+model_predictions %>% 
+  filter(year(.index) >= 2021) %>% 
+  select(.index,.value,.model_desc) %>% 
+  rbind(truck_employee_df_new) %>% 
+  ggplot(aes(
+    x=.index,
+    y=.value,
+    color=.model_desc
+  ))+
+  geom_line()+
+  gghighlight()+
+  ggthemes::theme_fivethirtyeight()+
+  labs(
+    title = "Trucking Employee Predictions: Comparing Models")
+
 
