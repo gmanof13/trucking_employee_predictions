@@ -14,6 +14,7 @@ library(recipes)
 library(tidymodels)
 library(modeltime.ensemble)
 library(gghighlight)
+library(keras)
 
 # getting the data ready  
 
@@ -79,14 +80,8 @@ model_df <-
 
 splits <- initial_time_split(model_df)
 
-# Model 1: auto_arima
 
-model_fit_arima_no_boost <- arima_reg() %>%
-  set_engine(engine = "auto_arima") %>%
-  fit(value ~ date, data = training(splits))
-
-
-# Model 2: arima_boost 
+# Model 1: arima_boost 
 
 model_fit_arima_boosted <- arima_boost(
   min_n = 2,
@@ -97,32 +92,36 @@ model_fit_arima_boosted <- arima_boost(
       data = training(splits))
 
 
-# Model 3: ets 
+# Model 2: ets 
 
 model_fit_ets <- exp_smoothing() %>%
   set_engine(engine = "ets") %>%
   fit(value ~ date, data = training(splits))
 
 
-# Model 4: prophet
+# Model 3: prophet
 
-model_fit_prophet <- prophet_reg() %>%
+model_fit_prophet <- prophet_reg(seasonality_yearly= TRUE,
+                                 seasonality_weekly=TRUE,
+                                 seasonality_daily= FALSE,
+                                 season = "multiplicative",
+                                 changepoint_range = .3) %>%
   set_engine(engine = "prophet") %>%
   fit(value ~ date, data = training(splits))
 
 
-# Model 5: lm
 
 model_fit_lm <- linear_reg() %>%
   set_engine("lm") %>%
   fit(value ~ as.numeric(date) + factor(month(date, label = TRUE), ordered = FALSE),
       data = training(splits))
 
+
+
 # all models 
 
 models_tbl <- 
   modeltime_table(
-    model_fit_arima_no_boost,
     model_fit_arima_boosted,
     model_fit_ets,
     model_fit_prophet,
@@ -140,13 +139,8 @@ calibration_tbl %>%
   modeltime_accuracy() 
 
 
-best_model_mae <- 
 model_accuracy %>% 
-  arrange(mae) %>% 
-  select(.model_desc) %>% 
-  head(1) %>% 
-  pull()
-
+  arrange(mae)
 
 refit_tbl <- calibration_tbl %>%
   modeltime_refit(data = model_df)
@@ -156,17 +150,7 @@ refit_tbl %>%
   modeltime_forecast(h = "1 years", actual_data = model_df)
 
 
-# plot forecast 
-
-model_predictions %>% 
-  filter(year(.index) >= 2022) %>% 
-  plot_modeltime_forecast(
-    .legend_max_width = 25,
-    .interactive      = FALSE,
-    .title = "All Employees, Truck Transportation: 1 Year Forecast",
-    .conf_interval_alpha = .05
-    
-  )
+# new data 
 
 truck_employee_df_new <- 
   truck_employee_fred_id %>% 
@@ -180,13 +164,10 @@ truck_employee_df_new <-
   rename(.index = date,
          .value = value)
 
-truck_employee_df_new
-
-
 # comparing model to new data 
 
 model_predictions %>% 
-  filter(year(.index) >= 2021) %>% 
+  filter(year(.index) >= 2023) %>% 
   select(.index,.value,.model_desc) %>% 
   rbind(truck_employee_df_new) %>% 
   ggplot(aes(
@@ -196,8 +177,11 @@ model_predictions %>%
   ))+
   geom_line()+
   gghighlight()+
-  ggthemes::theme_fivethirtyeight()+
+  ggthemes::theme_clean()+
+  scale_x_date(date_labels="%b-%y",date_breaks  ="1 month")+
   labs(
-    title = "Trucking Employee Predictions: Comparing Models")
+    title = "Trucking Employee Predictions: Comparing Models",
+    x = "Date",
+    y = "Number of Employees")
 
 
